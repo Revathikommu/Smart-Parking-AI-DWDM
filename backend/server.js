@@ -1,491 +1,237 @@
-require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 
 const connectDB = require("./config/db");
 const mysqlConnection = require("./config/mysql");
 
-const ParkingSlot = require("./models/ParkingSlot");
+// =====================================================
+// ROUTES
+// =====================================================
 
+const parkingRoutes = require("./routes/parkingRoutes");
 const parkingRecordRoutes = require("./routes/parkingRecordRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
 const mlRoutes = require("./routes/mlRoutes");
 const recommendationRoutes = require("./routes/recommendationRoutes");
 
+// =====================================================
+// APP
+// =====================================================
 
 const app = express();
 
-
-// ======================================================
+// =====================================================
 // MIDDLEWARE
-// ======================================================
+// =====================================================
 
 app.use(cors());
+
 app.use(express.json());
 
+app.use(express.urlencoded({ extended: true }));
 
-// ======================================================
-// ROUTES
-// ======================================================
-
-// Parking entry / exit
-app.use("/api/parking", parkingRecordRoutes);
-
-// Machine Learning
-app.use("/api/ml", mlRoutes);
-// Smart Parking Recommendation
-app.use("/api/recommendation", recommendationRoutes);
-
-
-// ======================================================
+// =====================================================
 // HOME ROUTE
-// ======================================================
+// =====================================================
 
 app.get("/", (req, res) => {
     res.json({
+        success: true,
         message: "Smart Parking AI-DWDM Backend is running",
-        status: "success"
+        status: "OK"
     });
 });
 
+// =====================================================
+// PARKING ROUTES
+// =====================================================
 
-// ======================================================
-// PARKING SLOTS
-// ======================================================
+// Parking slots
+app.use("/api/parking", parkingRoutes);
 
-app.get("/api/parking/slots", async (req, res) => {
-    try {
+// Parking entry / exit records
+app.use("/api/parking", parkingRecordRoutes);
 
-        const slots = await ParkingSlot
-            .find()
-            .sort({ slotNumber: 1 });
+// =====================================================
+// ANALYTICS ROUTES
+// =====================================================
 
-        res.json(slots);
+app.use("/api/analytics", analyticsRoutes);
 
-    } catch (error) {
+// =====================================================
+// MACHINE LEARNING ROUTES
+// =====================================================
 
-        console.error(
-            "Parking slots error:",
-            error.message
-        );
+app.use("/api/ml", mlRoutes);
 
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
+// =====================================================
+// RECOMMENDATION ROUTES
+// =====================================================
 
+app.use("/api/recommendation", recommendationRoutes);
 
-// ======================================================
-// ANALYTICS - TOTAL PARKING
-// ======================================================
-
-app.get("/api/analytics/total", async (req, res) => {
-
-    try {
-
-        const [rows] =
-            await mysqlConnection.execute(`
-                SELECT COUNT(*) AS total
-                FROM fact_parking
-            `);
-
-        res.json(rows[0]);
-
-    } catch (error) {
-
-        console.error(
-            "Total parking error:",
-            error.message
-        );
-
-        res.status(500).json({
-            error: error.message
-        });
-    }
-});
-
-
-// ======================================================
-// ANALYTICS - REVENUE
-// ======================================================
-
-app.get("/api/analytics/revenue", async (req, res) => {
-
-    try {
-
-        const [rows] =
-            await mysqlConnection.execute(`
-                SELECT
-                    COALESCE(SUM(amount), 0)
-                    AS total_revenue
-                FROM fact_parking
-            `);
-
-        res.json(rows[0]);
-
-    } catch (error) {
-
-        console.error(
-            "Revenue error:",
-            error.message
-        );
-
-        res.status(500).json({
-            error: error.message
-        });
-    }
-});
-
-
-// ======================================================
-// ANALYTICS - AVERAGE DURATION
-// ======================================================
-
-app.get(
-    "/api/analytics/average-duration",
-    async (req, res) => {
-
-        try {
-
-            const [rows] =
-                await mysqlConnection.execute(`
-                    SELECT
-                        COALESCE(
-                            AVG(duration_minutes),
-                            0
-                        ) AS average_duration
-                    FROM fact_parking
-                `);
-
-            res.json(rows[0]);
-
-        } catch (error) {
-
-            console.error(
-                "Average duration error:",
-                error.message
-            );
-
-            res.status(500).json({
-                error: error.message
-            });
-        }
-    }
-);
-
-
-// ======================================================
-// ANALYTICS - PEAK HOURS
-// ======================================================
-
-app.get(
-    "/api/analytics/peak-hours",
-    async (req, res) => {
-
-        try {
-
-            const [rows] =
-                await mysqlConnection.execute(`
-                    SELECT
-                        dt.hour,
-                        dt.hour_label,
-                        COUNT(fp.parking_id)
-                        AS parking_count
-                    FROM fact_parking fp
-                    JOIN dim_time dt
-                        ON fp.time_id = dt.time_id
-                    GROUP BY
-                        dt.hour,
-                        dt.hour_label
-                    ORDER BY
-                        parking_count DESC
-                `);
-
-            res.json(rows);
-
-        } catch (error) {
-
-            console.error(
-                "Peak hours error:",
-                error.message
-            );
-
-            res.status(500).json({
-                error: error.message
-            });
-        }
-    }
-);
-
-
-// ======================================================
-// ANALYTICS - VEHICLE ANALYSIS
-// ======================================================
-
-app.get(
-    "/api/analytics/vehicles",
-    async (req, res) => {
-
-        try {
-
-            const [rows] =
-                await mysqlConnection.execute(`
-                    SELECT
-                        dv.vehicle_type,
-                        COUNT(fp.parking_id)
-                        AS vehicle_count
-                    FROM fact_parking fp
-                    JOIN dim_vehicle dv
-                        ON fp.vehicle_id =
-                           dv.vehicle_id
-                    GROUP BY
-                        dv.vehicle_type
-                    ORDER BY
-                        vehicle_count DESC
-                `);
-
-            res.json(rows);
-
-        } catch (error) {
-
-            console.error(
-                "Vehicle analysis error:",
-                error.message
-            );
-
-            res.status(500).json({
-                error: error.message
-            });
-        }
-    }
-);
-
-
-// ======================================================
-// SYSTEM STATUS
-// ======================================================
+// =====================================================
+// STATUS ROUTE
+// =====================================================
 
 app.get("/api/status", async (req, res) => {
-
     try {
-
-        const [rows] =
-            await mysqlConnection.execute(`
-                SELECT 1 AS mysql_connected
-            `);
+        const [rows] = await mysqlConnection.execute(
+            "SELECT 1 AS mysql_status"
+        );
 
         res.json({
-
+            success: true,
             server: "running",
-
             mongodb: "connected",
-
             mysql:
-                rows[0].mysql_connected === 1
+                rows.length > 0
                     ? "connected"
-                    : "not connected",
-
-            ml: "available"
-
+                    : "not connected"
         });
 
     } catch (error) {
-
-        res.status(500).json({
-
-            server: "running",
-
-            mongodb: "connected",
-
-            mysql: "not connected",
-
-            ml: "available",
-
-            error: error.message
-
-        });
-    }
-});
-
-
-// ======================================================
-// 404 HANDLER
-// ======================================================
-
-app.use((req, res) => {
-
-    res.status(404).json({
-
-        success: false,
-
-        error: "API endpoint not found",
-
-        path: req.originalUrl
-
-    });
-
-});
-
-
-// ======================================================
-// ERROR HANDLER
-// ======================================================
-
-app.use(
-    (err, req, res, next) => {
-
         console.error(
-            "Server Error:",
-            err
+            "Status check error:",
+            error.message
         );
 
         res.status(500).json({
-
             success: false,
-
-            error: "Internal server error",
-
-            message: err.message
-
+            server: "running",
+            mongodb: "connected",
+            mysql: "not connected",
+            error: error.message
         });
-
     }
-);
+});
 
+// =====================================================
+// 404 ROUTE
+// =====================================================
 
-// ======================================================
-// PORT
-// ======================================================
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route not found: ${req.method} ${req.originalUrl}`
+    });
+});
 
-const PORT =
-    process.env.PORT || 5000;
+// =====================================================
+// ERROR HANDLER
+// =====================================================
 
+app.use((error, req, res, next) => {
+    console.error(
+        "Server error:",
+        error.message
+    );
 
-// ======================================================
-// START SERVER
-// ======================================================
+    res.status(500).json({
+        success: false,
+        error: error.message
+    });
+});
+
+// =====================================================
+// SERVER START
+// =====================================================
+
+const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
 
     try {
 
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "   STARTING SMART PARKING BACKEND"
-        );
-
-        console.log(
-            "========================================"
-        );
-
+        console.log("");
+        console.log("==========================================");
+        console.log("STARTING SMART PARKING BACKEND");
+        console.log("==========================================");
 
         // ------------------------------------------
         // MongoDB
         // ------------------------------------------
 
-        console.log(
-            "Connecting to MongoDB..."
-        );
+        console.log("Connecting to MongoDB...");
 
         await connectDB();
 
-        console.log(
-            "MongoDB ready."
-        );
-
+        console.log("MongoDB ready.");
 
         // ------------------------------------------
         // MySQL
         // ------------------------------------------
 
-        console.log(
-            "Checking MySQL connection..."
+        console.log("Checking MySQL connection...");
+
+        const [rows] = await mysqlConnection.execute(
+            "SELECT 1 AS test"
         );
 
-        await mysqlConnection.execute(
-            "SELECT 1"
-        );
-
-        console.log(
-            "MySQL ready."
-        );
-
+        if (rows.length > 0) {
+            console.log("MySQL ready.");
+        }
 
         // ------------------------------------------
-        // Start Express
+        // Start Express Server
         // ------------------------------------------
 
-        app.listen(
-            PORT,
-            () => {
+        app.listen(PORT, () => {
 
-                console.log(
-                    "========================================"
-                );
+            console.log("");
+            console.log("==========================================");
+            console.log("SMART PARKING AI-DWDM BACKEND");
+            console.log("==========================================");
 
-                console.log(
-                    "   SMART PARKING AI-DWDM BACKEND"
-                );
+            console.log(
+                `Server running on port ${PORT}`
+            );
 
-                console.log(
-                    "========================================"
-                );
+            console.log(
+                `URL: http://localhost:${PORT}`
+            );
 
-                console.log(
-                    `Server running on port ${PORT}`
-                );
+            console.log("MongoDB: Connected");
+            console.log("MySQL: Connected");
 
-                console.log(
-                    `URL: http://localhost:${PORT}`
-                );
+            console.log("");
+            console.log("Parking Routes: Ready");
+            console.log("Parking Entry/Exit: Ready");
+            console.log("Analytics Routes: Ready");
+            console.log("ML Routes: Ready");
+            console.log("Recommendation Routes: Ready");
 
-                console.log(
-                    "MongoDB: Connected"
-                );
+            console.log("");
+            console.log("Analytics endpoints:");
+            console.log(
+                `http://localhost:${PORT}/api/analytics/total`
+            );
+            console.log(
+                `http://localhost:${PORT}/api/analytics/revenue`
+            );
+            console.log(
+                `http://localhost:${PORT}/api/analytics/average-duration`
+            );
+            console.log(
+                `http://localhost:${PORT}/api/analytics/peak-hours`
+            );
+            console.log(
+                `http://localhost:${PORT}/api/analytics/vehicles`
+            );
+            console.log(
+                `http://localhost:${PORT}/api/analytics/live`
+            );
 
-                console.log(
-                    "MySQL: Connected"
-                );
-
-                console.log(
-                    "Parking Entry: Ready"
-                );
-
-                console.log(
-                    "Parking Exit: Ready"
-                );
-
-                console.log(
-                    "Analytics: Ready"
-                );
-
-                console.log(
-                    "ML Routes: Ready"
-                );
-
-                console.log(
-                    "========================================"
-                );
-            }
-        );
+            console.log("");
+            console.log("==========================================");
+        });
 
     } catch (error) {
 
+        console.error("");
         console.error(
-            "========================================"
-        );
-
-        console.error(
-            "SERVER STARTUP FAILED"
-        );
-
-        console.error(
-            "========================================"
+            "FAILED TO START SERVER"
         );
 
         console.error(
@@ -496,5 +242,8 @@ const startServer = async () => {
     }
 };
 
+// =====================================================
+// START
+// =====================================================
 
 startServer();

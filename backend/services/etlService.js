@@ -2,8 +2,12 @@ const ParkingRecord = require("../models/ParkingRecord");
 const mysqlConnection = require("../config/mysql");
 
 const runETL = async () => {
+
     try {
-        console.log("Starting ETL process...");
+
+        console.log("========================================");
+        console.log("        STARTING ETL PROCESS");
+        console.log("========================================");
 
         // ==================================================
         // GET PARKING RECORDS FROM MONGODB
@@ -11,7 +15,14 @@ const runETL = async () => {
 
         const records = await ParkingRecord.find();
 
-        console.log(`MongoDB records found: ${records.length}`);
+        console.log(
+            `MongoDB records found: ${records.length}`
+        );
+
+
+        // ==================================================
+        // PROCESS EACH PARKING RECORD
+        // ==================================================
 
         for (const record of records) {
 
@@ -37,25 +48,29 @@ const runETL = async () => {
             const month = entryDate.getMonth() + 1;
             const year = entryDate.getFullYear();
 
-            const monthName = entryDate.toLocaleString(
-                "en-US",
-                {
-                    month: "long"
-                }
-            );
+            const monthName =
+                entryDate.toLocaleString(
+                    "en-US",
+                    {
+                        month: "long"
+                    }
+                );
 
-            const quarter = Math.ceil(month / 3);
+            const quarter =
+                Math.ceil(month / 3);
 
-            const dayName = entryDate.toLocaleString(
-                "en-US",
-                {
-                    weekday: "long"
-                }
-            );
+            const dayName =
+                entryDate.toLocaleString(
+                    "en-US",
+                    {
+                        weekday: "long"
+                    }
+                );
 
             const isWeekend =
                 dayName === "Saturday" ||
                 dayName === "Sunday";
+
 
             await mysqlConnection.execute(
                 `
@@ -86,19 +101,16 @@ const runETL = async () => {
                 ]
             );
 
+
             // ==================================================
             // 2. TIME DIMENSION
             // ==================================================
 
-            const hour = entryDate.getHours();
-            const minute = entryDate.getMinutes();
+            const hour =
+                entryDate.getHours();
 
-            /*
-             * Example:
-             * 06:13 -> 373
-             * 11:43 -> 703
-             * 12:04 -> 724
-             */
+            const minute =
+                entryDate.getMinutes();
 
             const timeId =
                 hour * 60 + minute;
@@ -116,13 +128,17 @@ const runETL = async () => {
 
             if (hour < 6) {
                 period = "Night";
-            } else if (hour < 12) {
+            }
+            else if (hour < 12) {
                 period = "Morning";
-            } else if (hour < 18) {
+            }
+            else if (hour < 18) {
                 period = "Afternoon";
-            } else {
+            }
+            else {
                 period = "Evening";
             }
+
 
             await mysqlConnection.execute(
                 `
@@ -145,6 +161,7 @@ const runETL = async () => {
                 ]
             );
 
+
             // ==================================================
             // 3. LOCATION DIMENSION
             // ==================================================
@@ -157,17 +174,22 @@ const runETL = async () => {
                     WHERE area = ?
                     LIMIT 1
                     `,
-                    [record.parkingArea]
+                    [
+                        record.parkingArea
+                    ]
                 );
 
+
             let locationId;
+
 
             if (locationRows.length > 0) {
 
                 locationId =
                     locationRows[0].location_id;
 
-            } else {
+            }
+            else {
 
                 const [locationResult] =
                     await mysqlConnection.execute(
@@ -191,6 +213,7 @@ const runETL = async () => {
                     locationResult.insertId;
             }
 
+
             // ==================================================
             // 4. VEHICLE DIMENSION
             // ==================================================
@@ -203,17 +226,22 @@ const runETL = async () => {
                     WHERE vehicle_number = ?
                     LIMIT 1
                     `,
-                    [record.vehicleNumber]
+                    [
+                        record.vehicleNumber
+                    ]
                 );
 
+
             let vehicleId;
+
 
             if (vehicleRows.length > 0) {
 
                 vehicleId =
                     vehicleRows[0].vehicle_id;
 
-            } else {
+            }
+            else {
 
                 const [vehicleResult] =
                     await mysqlConnection.execute(
@@ -237,21 +265,10 @@ const runETL = async () => {
                     vehicleResult.insertId;
             }
 
-            // ==================================================
-            // 5. DUPLICATE CHECK
-            // ==================================================
 
-            /*
-             * We identify a parking event using:
-             *
-             * vehicle_id
-             * slot_number
-             * entry_time
-             *
-             * A 1-second tolerance is used because
-             * JavaScript Date and MySQL DATETIME can have
-             * slightly different representations.
-             */
+            // ==================================================
+            // 5. FIND EXISTING PARKING FACT
+            // ==================================================
 
             const [existingFactRows] =
                 await mysqlConnection.execute(
@@ -276,26 +293,10 @@ const runETL = async () => {
                     ]
                 );
 
-            if (existingFactRows.length > 0) {
-
-                console.log(
-                    `Skipping existing parking record: ` +
-                    `${record.vehicleNumber} | ` +
-                    `${record.slotNumber} | ` +
-                    `${record.entryTime}`
-                );
-
-                continue;
-            }
 
             // ==================================================
-            // 6. PARKING FACT
+            // 6. CALCULATE CURRENT PARKING DATA
             // ==================================================
-
-            /*
-             * MongoDB duration is stored in minutes.
-             * MySQL duration_minutes also expects minutes.
-             */
 
             const duration =
                 Number(record.duration) || 0;
@@ -307,6 +308,54 @@ const runETL = async () => {
                 record.exitTime
                     ? "Completed"
                     : "Active";
+
+
+            // ==================================================
+            // 7. UPDATE EXISTING RECORD
+            // ==================================================
+
+            if (existingFactRows.length > 0) {
+
+                const parkingId =
+                    existingFactRows[0].parking_id;
+
+
+                await mysqlConnection.execute(
+                    `
+                    UPDATE fact_parking
+                    SET
+                        exit_time = ?,
+                        duration_minutes = ?,
+                        amount = ?,
+                        parking_status = ?
+                    WHERE parking_id = ?
+                    `,
+                    [
+                        record.exitTime,
+                        duration,
+                        amount,
+                        parkingStatus,
+                        parkingId
+                    ]
+                );
+
+
+                console.log(
+                    `UPDATED: ${record.vehicleNumber} | ` +
+                    `${record.slotNumber} | ` +
+                    `Duration: ${duration} min | ` +
+                    `Amount: ₹${amount} | ` +
+                    `Status: ${parkingStatus}`
+                );
+
+
+                continue;
+            }
+
+
+            // ==================================================
+            // 8. INSERT NEW RECORD
+            // ==================================================
 
             await mysqlConnection.execute(
                 `
@@ -339,22 +388,37 @@ const runETL = async () => {
                 ]
             );
 
+
             console.log(
-                `Inserted parking record: ` +
-                `${record.vehicleNumber} | ` +
-                `${record.slotNumber}`
+                `INSERTED: ${record.vehicleNumber} | ` +
+                `${record.slotNumber} | ` +
+                `Status: ${parkingStatus}`
             );
+
         }
 
-        console.log("ETL completed successfully!");
 
-    } catch (error) {
+        // ==================================================
+        // ETL COMPLETE
+        // ==================================================
 
-        console.error("ETL failed:");
+        console.log("========================================");
+        console.log("        ETL COMPLETED SUCCESSFULLY");
+        console.log("========================================");
+
+
+    }
+    catch (error) {
+
+        console.error("========================================");
+        console.error("             ETL FAILED");
+        console.error("========================================");
+
         console.error(error.message);
 
         throw error;
     }
 };
+
 
 module.exports = runETL;

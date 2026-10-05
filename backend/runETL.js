@@ -1,29 +1,49 @@
 require("dotenv").config();
 
+const mongoose = require("mongoose");
+
 const connectDB = require("./config/db");
 const runETL = require("./services/etlService");
 
-const startETL = async () => {
-    try {
-        console.log("Connecting to MongoDB...");
-        
-        await connectDB();
+const main = async () => {
 
-        console.log("MongoDB ready for ETL.");
+    try {
+
+        console.log("Starting ETL runner...");
+
+        await connectDB();
 
         await runETL();
 
-        console.log("ETL process finished successfully.");
+        console.log("ETL runner completed successfully.");
+
+        await mongoose.connection.close();
+
+        console.log("MongoDB connection closed.");
 
         process.exit(0);
 
-    } catch (error) {
+    }
+    catch (error) {
 
-        console.error("ETL process failed:");
-        console.error(error);
+        console.error(
+            "ETL runner failed:",
+            error.message
+        );
+
+        try {
+            await mongoose.connection.close();
+        }
+        catch (closeError) {
+            console.error(
+                "MongoDB close error:",
+                closeError.message
+            );
+        }
 
         process.exit(1);
     }
 };
 
-startETL();
+
+main();

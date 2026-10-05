@@ -2,6 +2,7 @@ const express = require("express");
 
 const ParkingRecord = require("../models/ParkingRecord");
 const ParkingSlot = require("../models/ParkingSlot");
+const runETL = require("../services/etlService");
 
 const router = express.Router();
 
@@ -202,7 +203,7 @@ router.post("/exit", async (req, res) => {
 
         const updatedRecord =
             await parkingRecord.save();
-
+        
         // -------------------------------
         // Make slot available
         // -------------------------------
@@ -218,7 +219,15 @@ router.post("/exit", async (req, res) => {
 
             await slot.save();
         }
+        // -------------------------------
+        // AUTOMATIC ETL
+        // -------------------------------
 
+        console.log("Running automatic ETL after vehicle exit...");
+
+        await runETL();
+
+        console.log("Automatic ETL completed.");
         // -------------------------------
         // Send response
         // -------------------------------

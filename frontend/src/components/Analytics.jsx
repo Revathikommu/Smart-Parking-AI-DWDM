@@ -4,15 +4,23 @@ function Analytics() {
     const [totalParking, setTotalParking] = useState(0);
     const [revenue, setRevenue] = useState(0);
     const [averageDuration, setAverageDuration] = useState(0);
+
     const [peakHours, setPeakHours] = useState([]);
     const [vehicles, setVehicles] = useState([]);
+
+    const [liveParking, setLiveParking] = useState({
+        totalSlots: 0,
+        occupiedSlots: 0,
+        availableSlots: 0,
+        occupancyPercentage: 0
+    });
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
     useEffect(() => {
         const fetchAnalytics = async () => {
             try {
-                setLoading(true);
                 setError("");
 
                 const [
@@ -20,24 +28,26 @@ function Analytics() {
                     revenueResponse,
                     durationResponse,
                     peakResponse,
-                    vehicleResponse
+                    vehicleResponse,
+                    liveResponse
                 ] = await Promise.all([
                     fetch("http://localhost:5000/api/analytics/total"),
                     fetch("http://localhost:5000/api/analytics/revenue"),
                     fetch("http://localhost:5000/api/analytics/average-duration"),
                     fetch("http://localhost:5000/api/analytics/peak-hours"),
-                    fetch("http://localhost:5000/api/analytics/vehicles")
+                    fetch("http://localhost:5000/api/analytics/vehicles"),
+                    fetch("http://localhost:5000/api/analytics/live")
                 ]);
 
-                // Check API responses
                 if (
                     !totalResponse.ok ||
                     !revenueResponse.ok ||
                     !durationResponse.ok ||
                     !peakResponse.ok ||
-                    !vehicleResponse.ok
+                    !vehicleResponse.ok ||
+                    !liveResponse.ok
                 ) {
-                    throw new Error("Failed to fetch analytics data");
+                    throw new Error("One or more analytics APIs failed");
                 }
 
                 const totalData = await totalResponse.json();
@@ -45,8 +55,15 @@ function Analytics() {
                 const durationData = await durationResponse.json();
                 const peakData = await peakResponse.json();
                 const vehicleData = await vehicleResponse.json();
+                const liveData = await liveResponse.json();
 
-                setTotalParking(Number(totalData.total) || 0);
+                // -----------------------------
+                // Historical Analytics
+                // -----------------------------
+
+                setTotalParking(
+                    Number(totalData.total) || 0
+                );
 
                 setRevenue(
                     Number(revenueData.total_revenue) || 0
@@ -56,30 +73,75 @@ function Analytics() {
                     Number(durationData.average_duration) || 0
                 );
 
+                // IMPORTANT:
+                // Backend returns { peak_hours: [...] }
                 setPeakHours(
-                    Array.isArray(peakData) ? peakData : []
+                    Array.isArray(peakData.peak_hours)
+                        ? peakData.peak_hours
+                        : []
                 );
 
+                // IMPORTANT:
+                // Backend returns { vehicles: [...] }
                 setVehicles(
-                    Array.isArray(vehicleData) ? vehicleData : []
+                    Array.isArray(vehicleData.vehicles)
+                        ? vehicleData.vehicles
+                        : []
                 );
+
+                // -----------------------------
+                // Live Parking Analytics
+                // -----------------------------
+
+                setLiveParking({
+                    totalSlots:
+                        Number(liveData.totalSlots) || 0,
+
+                    occupiedSlots:
+                        Number(liveData.occupiedSlots) || 0,
+
+                    availableSlots:
+                        Number(liveData.availableSlots) || 0,
+
+                    occupancyPercentage:
+                        Number(liveData.occupancyPercentage) || 0
+                });
 
             } catch (err) {
                 console.error("Analytics error:", err);
-                setError("Unable to load analytics data.");
+
+                setError(
+                    `Unable to load parking analytics: ${err.message}`
+                );
             } finally {
                 setLoading(false);
             }
         };
 
+        // First load
         fetchAnalytics();
+
+        // Refresh every 5 seconds
+        const interval = setInterval(() => {
+            fetchAnalytics();
+        }, 5000);
+
+        return () => {
+            clearInterval(interval);
+        };
+
     }, []);
 
     if (loading) {
         return (
             <div style={styles.container}>
-                <h2 style={styles.title}>📊 Parking Analytics</h2>
-                <p style={styles.loading}>Loading analytics...</p>
+                <h2 style={styles.title}>
+                    📊 Parking Analytics
+                </h2>
+
+                <p style={styles.loading}>
+                    Loading analytics...
+                </p>
             </div>
         );
     }
@@ -87,9 +149,6 @@ function Analytics() {
     return (
         <div style={styles.container}>
 
-            {/* =========================================
-                TITLE
-            ========================================= */}
             <h2 style={styles.title}>
                 📊 Parking Analytics
             </h2>
@@ -100,13 +159,97 @@ function Analytics() {
                 </div>
             )}
 
-            {/* =========================================
+            {/* ================================
+                LIVE PARKING STATUS
+            ================================= */}
+
+            <div style={styles.liveSection}>
+
+                <h3 style={styles.liveTitle}>
+                    🅿️ Live Parking Status
+                </h3>
+
+                <div style={styles.liveGrid}>
+
+                    <div style={styles.liveCard}>
+                        <div style={styles.liveIcon}>
+                            🚗
+                        </div>
+
+                        <div style={styles.liveLabel}>
+                            Total Slots
+                        </div>
+
+                        <div style={styles.liveValue}>
+                            {liveParking.totalSlots}
+                        </div>
+                    </div>
+
+                    <div style={styles.liveCard}>
+                        <div style={styles.liveIcon}>
+                            🟢
+                        </div>
+
+                        <div style={styles.liveLabel}>
+                            Available
+                        </div>
+
+                        <div
+                            style={{
+                                ...styles.liveValue,
+                                color: "#16a34a"
+                            }}
+                        >
+                            {liveParking.availableSlots}
+                        </div>
+                    </div>
+
+                    <div style={styles.liveCard}>
+                        <div style={styles.liveIcon}>
+                            🔴
+                        </div>
+
+                        <div style={styles.liveLabel}>
+                            Occupied
+                        </div>
+
+                        <div
+                            style={{
+                                ...styles.liveValue,
+                                color: "#dc2626"
+                            }}
+                        >
+                            {liveParking.occupiedSlots}
+                        </div>
+                    </div>
+
+                    <div style={styles.liveCard}>
+                        <div style={styles.liveIcon}>
+                            📊
+                        </div>
+
+                        <div style={styles.liveLabel}>
+                            Occupancy
+                        </div>
+
+                        <div style={styles.liveValue}>
+                            {liveParking.occupancyPercentage}%
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {/* ================================
                 SUMMARY CARDS
-            ========================================= */}
+            ================================= */}
+
             <div style={styles.statsGrid}>
 
                 <div style={styles.card}>
-                    <div style={styles.cardIcon}>🚗</div>
+                    <div style={styles.cardIcon}>
+                        🚗
+                    </div>
 
                     <h3 style={styles.cardTitle}>
                         Total Parking
@@ -122,7 +265,9 @@ function Analytics() {
                 </div>
 
                 <div style={styles.card}>
-                    <div style={styles.cardIcon}>💰</div>
+                    <div style={styles.cardIcon}>
+                        💰
+                    </div>
 
                     <h3 style={styles.cardTitle}>
                         Total Revenue
@@ -138,7 +283,9 @@ function Analytics() {
                 </div>
 
                 <div style={styles.card}>
-                    <div style={styles.cardIcon}>⏱️</div>
+                    <div style={styles.cardIcon}>
+                        ⏱️
+                    </div>
 
                     <h3 style={styles.cardTitle}>
                         Average Duration
@@ -149,19 +296,20 @@ function Analytics() {
                     </p>
 
                     <p style={styles.cardLabel}>
-                        Minutes per vehicle
+                        Minutes
                     </p>
                 </div>
 
             </div>
 
-            {/* =========================================
+            {/* ================================
                 PEAK HOURS
-            ========================================= */}
+            ================================= */}
+
             <div style={styles.section}>
 
                 <h3 style={styles.sectionTitle}>
-                    📈 Peak Parking Hours
+                    ⏰ Peak Parking Hours
                 </h3>
 
                 {peakHours.length === 0 ? (
@@ -169,60 +317,32 @@ function Analytics() {
                         No peak-hour data available.
                     </p>
                 ) : (
-                    <div style={styles.chartContainer}>
+                    <div style={styles.list}>
 
-                        {peakHours.map((item, index) => {
+                        {peakHours.map((item, index) => (
+                            <div
+                                key={index}
+                                style={styles.listItem}
+                            >
+                                <span>
+                                    {item.hour_label}
+                                </span>
 
-                            const maxCount = Math.max(
-                                ...peakHours.map(
-                                    (p) => Number(p.parking_count) || 0
-                                ),
-                                1
-                            );
-
-                            const count =
-                                Number(item.parking_count) || 0;
-
-                            const width =
-                                (count / maxCount) * 100;
-
-                            return (
-                                <div
-                                    key={index}
-                                    style={styles.chartRow}
-                                >
-
-                                    <div style={styles.chartLabel}>
-                                        {item.hour_label}
-                                    </div>
-
-                                    <div style={styles.barBackground}>
-
-                                        <div
-                                            style={{
-                                                ...styles.bar,
-                                                width: `${width}%`
-                                            }}
-                                        >
-                                            <span>
-                                                {count}
-                                            </span>
-                                        </div>
-
-                                    </div>
-
-                                </div>
-                            );
-                        })}
+                                <strong>
+                                    {item.count} parking
+                                </strong>
+                            </div>
+                        ))}
 
                     </div>
                 )}
 
             </div>
 
-            {/* =========================================
+            {/* ================================
                 VEHICLE ANALYSIS
-            ========================================= */}
+            ================================= */}
+
             <div style={styles.section}>
 
                 <h3 style={styles.sectionTitle}>
@@ -231,36 +351,24 @@ function Analytics() {
 
                 {vehicles.length === 0 ? (
                     <p style={styles.noData}>
-                        No vehicle analysis data available.
+                        No vehicle data available.
                     </p>
                 ) : (
-                    <div style={styles.vehicleGrid}>
+                    <div style={styles.list}>
 
                         {vehicles.map((vehicle, index) => (
-
                             <div
                                 key={index}
-                                style={styles.vehicleCard}
+                                style={styles.listItem}
                             >
+                                <span>
+                                    {vehicle.vehicle_type}
+                                </span>
 
-                                <div style={styles.vehicleIcon}>
-                                    🚗
-                                </div>
-
-                                <div>
-                                    <h4 style={styles.vehicleType}>
-                                        {vehicle.vehicle_type || "Unknown"}
-                                    </h4>
-
-                                    <p style={styles.vehicleCount}>
-                                        {Number(vehicle.vehicle_count) || 0}
-                                        {" "}
-                                        vehicles
-                                    </p>
-                                </div>
-
+                                <strong>
+                                    {vehicle.count}
+                                </strong>
                             </div>
-
                         ))}
 
                     </div>
@@ -272,172 +380,140 @@ function Analytics() {
     );
 }
 
-
-/* =========================================
-   STYLES
-========================================= */
-
 const styles = {
-
     container: {
-        width: "100%",
-        boxSizing: "border-box",
+        background: "#ffffff",
+        borderRadius: "16px",
         padding: "25px",
-        backgroundColor: "#f5f7fa",
-        borderRadius: "15px",
-        marginTop: "25px"
+        marginTop: "25px",
+        boxShadow: "0 4px 15px rgba(0,0,0,0.08)"
     },
 
     title: {
         textAlign: "center",
-        fontSize: "28px",
-        marginBottom: "25px",
+        marginBottom: "20px",
         color: "#1f2937"
     },
 
     loading: {
         textAlign: "center",
-        fontSize: "18px",
-        color: "#666"
+        color: "#64748b",
+        fontSize: "18px"
     },
 
     error: {
-        backgroundColor: "#fee2e2",
+        background: "#fee2e2",
         color: "#b91c1c",
-        padding: "12px 15px",
+        padding: "12px",
         borderRadius: "8px",
         marginBottom: "20px",
         textAlign: "center"
     },
 
+    liveSection: {
+        marginBottom: "25px"
+    },
+
+    liveTitle: {
+        textAlign: "center",
+        color: "#334155",
+        marginBottom: "15px"
+    },
+
+    liveGrid: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        gap: "15px"
+    },
+
+    liveCard: {
+        background: "#f8fafc",
+        padding: "18px",
+        borderRadius: "12px",
+        textAlign: "center",
+        border: "1px solid #e2e8f0"
+    },
+
+    liveIcon: {
+        fontSize: "28px",
+        marginBottom: "8px"
+    },
+
+    liveLabel: {
+        color: "#64748b",
+        fontSize: "14px"
+    },
+
+    liveValue: {
+        fontSize: "28px",
+        fontWeight: "bold",
+        color: "#1e293b",
+        marginTop: "5px"
+    },
+
     statsGrid: {
         display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: "20px",
+        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gap: "18px",
         marginBottom: "25px"
     },
 
     card: {
-        backgroundColor: "#ffffff",
+        background: "#f8fafc",
+        padding: "20px",
         borderRadius: "12px",
-        padding: "22px",
         textAlign: "center",
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)"
+        border: "1px solid #e2e8f0"
     },
 
     cardIcon: {
-        fontSize: "30px",
-        marginBottom: "8px"
+        fontSize: "30px"
     },
 
     cardTitle: {
-        margin: "5px 0",
-        color: "#4b5563",
-        fontSize: "18px"
+        color: "#334155",
+        margin: "8px 0"
     },
 
     cardValue: {
-        margin: "10px 0 5px",
-        fontSize: "32px",
+        fontSize: "30px",
         fontWeight: "bold",
-        color: "#111827"
+        color: "#2563eb",
+        margin: "5px 0"
     },
 
     cardLabel: {
-        margin: 0,
-        color: "#6b7280",
+        color: "#64748b",
         fontSize: "14px"
     },
 
     section: {
-        backgroundColor: "#ffffff",
-        borderRadius: "12px",
-        padding: "25px",
-        marginBottom: "25px",
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)"
+        marginTop: "25px"
     },
 
     sectionTitle: {
-        textAlign: "center",
-        fontSize: "22px",
-        marginBottom: "25px",
-        color: "#1f2937"
+        color: "#334155",
+        marginBottom: "12px"
+    },
+
+    list: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px"
+    },
+
+    listItem: {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "12px 15px",
+        background: "#f8fafc",
+        borderRadius: "8px",
+        border: "1px solid #e2e8f0"
     },
 
     noData: {
-        textAlign: "center",
-        color: "#6b7280"
-    },
-
-    chartContainer: {
-        width: "100%"
-    },
-
-    chartRow: {
-        display: "flex",
-        alignItems: "center",
-        gap: "15px",
-        marginBottom: "15px"
-    },
-
-    chartLabel: {
-        width: "100px",
-        fontWeight: "600",
-        color: "#374151",
-        textAlign: "right"
-    },
-
-    barBackground: {
-        flex: 1,
-        height: "32px",
-        backgroundColor: "#e5e7eb",
-        borderRadius: "6px",
-        overflow: "hidden"
-    },
-
-    bar: {
-        height: "100%",
-        minWidth: "40px",
-        backgroundColor: "#2563eb",
-        borderRadius: "6px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        paddingRight: "10px",
-        boxSizing: "border-box",
-        color: "#ffffff",
-        fontWeight: "bold"
-    },
-
-    vehicleGrid: {
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-        gap: "15px"
-    },
-
-    vehicleCard: {
-        display: "flex",
-        alignItems: "center",
-        gap: "15px",
-        padding: "18px",
-        borderRadius: "10px",
-        backgroundColor: "#f9fafb",
-        border: "1px solid #e5e7eb"
-    },
-
-    vehicleIcon: {
-        fontSize: "30px"
-    },
-
-    vehicleType: {
-        margin: "0 0 5px",
-        color: "#1f2937",
-        fontSize: "18px"
-    },
-
-    vehicleCount: {
-        margin: 0,
-        color: "#6b7280"
+        color: "#64748b",
+        textAlign: "center"
     }
 };
 
