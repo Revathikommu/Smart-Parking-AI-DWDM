@@ -22,6 +22,7 @@ body {
 .header h1 {
     margin: 0;
     font-size: 32px;
+    color: white;
 }
 
 .header p {
