@@ -13,29 +13,22 @@ const router = express.Router();
 
 router.post("/entry", async (req, res) => {
     try {
-
         const {
             vehicleNumber,
             slotNumber,
             parkingArea
         } = req.body;
 
-        // -------------------------------
-        // Validate input
-        // -------------------------------
-
+        // Validation
         if (!vehicleNumber || !slotNumber || !parkingArea) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Vehicle number, parking slot and parking area are required."
+                    "Vehicle number, slot number and parking area are required."
             });
         }
 
-        // -------------------------------
         // Find parking slot
-        // -------------------------------
-
         const slot = await ParkingSlot.findOne({
             slotNumber: slotNumber
         });
@@ -43,25 +36,19 @@ router.post("/entry", async (req, res) => {
         if (!slot) {
             return res.status(404).json({
                 success: false,
-                message: `Parking slot ${slotNumber} not found.`
+                message: "Parking slot not found."
             });
         }
 
-        // -------------------------------
         // Check slot availability
-        // -------------------------------
-
         if (slot.status === "occupied") {
             return res.status(400).json({
                 success: false,
-                message: `Parking slot ${slotNumber} is already occupied.`
+                message: "This parking slot is already occupied."
             });
         }
 
-        // -------------------------------
         // Check vehicle already parked
-        // -------------------------------
-
         const existingVehicle = await ParkingRecord.findOne({
             vehicleNumber: vehicleNumber,
             exitTime: null
@@ -70,15 +57,11 @@ router.post("/entry", async (req, res) => {
         if (existingVehicle) {
             return res.status(400).json({
                 success: false,
-                message:
-                    `Vehicle ${vehicleNumber} is already parked in slot ${existingVehicle.slotNumber}.`
+                message: "This vehicle is already parked."
             });
         }
 
-        // -------------------------------
         // Create parking record
-        // -------------------------------
-
         const parkingRecord = new ParkingRecord({
             vehicleNumber: vehicleNumber,
             slotNumber: slotNumber,
@@ -91,34 +74,28 @@ router.post("/entry", async (req, res) => {
 
         const savedRecord = await parkingRecord.save();
 
-        // -------------------------------
         // Update parking slot
-        // -------------------------------
-
         slot.status = "occupied";
         slot.vehicleNumber = vehicleNumber;
 
-        const updatedSlot = await slot.save();
+        await slot.save();
 
-        // -------------------------------
-        // Send response
-        // -------------------------------
-
-        return res.status(201).json({
+        // Response
+        res.status(201).json({
             success: true,
-            message: "Vehicle parked successfully!",
-            record: savedRecord,
-            slot: updatedSlot
+            message: "Vehicle entered successfully.",
+            record: savedRecord
         });
 
     } catch (error) {
+        console.error(
+            "Vehicle entry error:",
+            error.message
+        );
 
-        console.error("VEHICLE ENTRY ERROR:");
-        console.error(error);
-
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Unable to park vehicle.",
+            message: "Unable to process vehicle entry.",
             error: error.message
         });
     }
@@ -131,15 +108,9 @@ router.post("/entry", async (req, res) => {
 
 router.post("/exit", async (req, res) => {
     try {
+        const { vehicleNumber } = req.body;
 
-        const {
-            vehicleNumber
-        } = req.body;
-
-        // -------------------------------
-        // Validate input
-        // -------------------------------
-
+        // Validation
         if (!vehicleNumber) {
             return res.status(400).json({
                 success: false,
@@ -147,110 +118,349 @@ router.post("/exit", async (req, res) => {
             });
         }
 
-        // -------------------------------
         // Find active parking record
-        // -------------------------------
-
-        const parkingRecord =
-            await ParkingRecord.findOne({
-                vehicleNumber: vehicleNumber,
-                exitTime: null
-            });
+        const parkingRecord = await ParkingRecord.findOne({
+            vehicleNumber: vehicleNumber,
+            exitTime: null
+        });
 
         if (!parkingRecord) {
             return res.status(404).json({
                 success: false,
                 message:
-                    `No active parking record found for ${vehicleNumber}.`
+                    "No active parking record found for this vehicle."
             });
         }
 
-        // -------------------------------
-        // Exit time
-        // -------------------------------
-
+        // Calculate exit time
         const exitTime = new Date();
 
-        // -------------------------------
-        // Duration in minutes
-        // -------------------------------
+        // Calculate duration
+        const durationMilliseconds =
+            exitTime.getTime() -
+            new Date(parkingRecord.entryTime).getTime();
 
-        const durationMinutes =
-            (exitTime - parkingRecord.entryTime) /
-            (1000 * 60);
+        const durationMinutes = Math.max(
+            0,
+            durationMilliseconds / (1000 * 60)
+        );
 
-        // -------------------------------
         // Parking fee
         // ₹20 per started hour
-        // -------------------------------
-
         const hours = Math.ceil(
             durationMinutes / 60
         );
 
-        const amount = Math.max(1, hours) * 20;
+        const amount = Math.max(
+            1,
+            hours
+        ) * 20;
 
-        // -------------------------------
         // Update parking record
-        // -------------------------------
-
         parkingRecord.exitTime = exitTime;
 
-        // Store duration in minutes
-        parkingRecord.duration = durationMinutes;
+        parkingRecord.duration =
+            Number(durationMinutes.toFixed(2));
 
-        parkingRecord.amount = amount;
+        parkingRecord.amount =
+            Number(amount.toFixed(2));
 
         const updatedRecord =
             await parkingRecord.save();
-        
-        // -------------------------------
-        // Make slot available
-        // -------------------------------
 
+        // Make parking slot available
         const slot = await ParkingSlot.findOne({
             slotNumber: parkingRecord.slotNumber
         });
 
         if (slot) {
-
             slot.status = "available";
             slot.vehicleNumber = null;
 
             await slot.save();
         }
-        // -------------------------------
+
+
+        // ==================================================
         // AUTOMATIC ETL
-        // -------------------------------
+        // ==================================================
 
-        console.log("Running automatic ETL after vehicle exit...");
+        console.log("");
+        console.log("==========================================");
+        console.log("RUNNING AUTOMATIC ETL AFTER VEHICLE EXIT");
+        console.log("==========================================");
 
-        await runETL();
+        try {
+            await runETL();
 
-        console.log("Automatic ETL completed.");
-        // -------------------------------
-        // Send response
-        // -------------------------------
+            console.log(
+                "Automatic ETL completed successfully."
+            );
 
-        return res.json({
+        } catch (etlError) {
+
+            console.error(
+                "Automatic ETL failed:",
+                etlError.message
+            );
+
+            // Important:
+            // Vehicle exit should still succeed
+            // even if ETL has an error.
+        }
+
+
+        // Response
+        res.json({
             success: true,
-            message: "Vehicle exited successfully!",
-            record: updatedRecord,
-            slot: slot
+
+            message:
+                "Vehicle exited successfully.",
+
+            record:
+                updatedRecord,
+
+            parkingFee:
+                Number(amount.toFixed(2)),
+
+            durationMinutes:
+                Number(durationMinutes.toFixed(2))
         });
 
     } catch (error) {
 
-        console.error("VEHICLE EXIT ERROR:");
-        console.error(error);
+        console.error(
+            "Vehicle exit error:",
+            error.message
+        );
 
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Unable to exit vehicle.",
-            error: error.message
+
+            message:
+                "Unable to process vehicle exit.",
+
+            error:
+                error.message
         });
     }
 });
 
+
+// ======================================================
+// PARKING LOGS
+// ======================================================
+
+router.get("/logs", async (req, res) => {
+    try {
+
+        // Get all parking records
+        // Newest first
+        const records =
+            await ParkingRecord.find()
+                .sort({
+                    entryTime: -1
+                })
+                .lean();
+
+
+        // Prepare log data
+        const logs = await Promise.all(
+
+            records.map(
+                async (record) => {
+
+                    // Find slot information
+                    const slot =
+                        await ParkingSlot.findOne({
+                            slotNumber:
+                                record.slotNumber
+                        }).lean();
+
+
+                    const isCompleted =
+                        Boolean(
+                            record.exitTime
+                        );
+
+
+                    return {
+
+                        id:
+                            record._id,
+
+                        vehicleNumber:
+                            record.vehicleNumber,
+
+                        slotNumber:
+                            record.slotNumber,
+
+                        floor:
+                            slot?.floor ||
+                            "Floor 1",
+
+                        area:
+                            record.parkingArea ||
+                            slot?.area ||
+                            "A",
+
+                        entryTime:
+                            record.entryTime,
+
+                        exitTime:
+                            record.exitTime,
+
+                        type:
+                            isCompleted
+                                ? "Exit"
+                                : "Entry",
+
+                        status:
+                            isCompleted
+                                ? "Success"
+                                : "Active",
+
+                        duration:
+                            Number(
+                                record.duration
+                            ) || 0,
+
+                        amount:
+                            Number(
+                                record.amount
+                            ) || 0
+                    };
+                }
+            )
+        );
+
+
+        // Response
+        res.json({
+
+            success: true,
+
+            count:
+                logs.length,
+
+            logs:
+                logs
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Parking logs error:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to load parking logs.",
+
+            error:
+                error.message
+        });
+    }
+});
+
+
+// ======================================================
+// GET ACTIVE PARKING RECORDS
+// ======================================================
+
+router.get("/active", async (req, res) => {
+    try {
+
+        const records =
+            await ParkingRecord.find({
+                exitTime: null
+            })
+            .sort({
+                entryTime: -1
+            });
+
+
+        res.json({
+
+            success: true,
+
+            count:
+                records.length,
+
+            records:
+                records
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Active parking records error:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            error:
+                error.message
+        });
+    }
+});
+
+
+// ======================================================
+// GET ALL PARKING RECORDS
+// ======================================================
+
+router.get("/records", async (req, res) => {
+    try {
+
+        const records =
+            await ParkingRecord.find()
+                .sort({
+                    entryTime: -1
+                });
+
+
+        res.json({
+
+            success: true,
+
+            count:
+                records.length,
+
+            records:
+                records
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Parking records error:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            error:
+                error.message
+        });
+    }
+});
+
+
+// ======================================================
+// EXPORT ROUTER
+// ======================================================
 
 module.exports = router;

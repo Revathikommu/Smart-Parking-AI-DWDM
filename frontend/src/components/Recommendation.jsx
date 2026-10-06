@@ -5,45 +5,52 @@ const Recommendation = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    const fetchRecommendation = async () => {
+        try {
+            const response = await fetch(
+                "http://localhost:5000/api/recommendation"
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Failed to fetch recommendation"
+                );
+            }
+
+            const data = await response.json();
+
+            if (data.recommended) {
+                setRecommendation(data.recommendation);
+            } else {
+                setRecommendation(null);
+            }
+
+            setError("");
+        } catch (err) {
+            console.error(
+                "Recommendation API Error:",
+                err
+            );
+
+            setError(
+                "Unable to load parking recommendation."
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
+        // Fetch immediately
+        fetchRecommendation();
 
-        fetch("http://localhost:5000/api/recommendation")
-            .then((response) => {
+        // Refresh every 3 seconds
+        const interval = setInterval(() => {
+            fetchRecommendation();
+        }, 3000);
 
-                if (!response.ok) {
-                    throw new Error(
-                        "Failed to fetch recommendation"
-                    );
-                }
-
-                return response.json();
-            })
-            .then((data) => {
-
-                if (data.recommended) {
-                    setRecommendation(
-                        data.recommendation
-                    );
-                } else {
-                    setRecommendation(null);
-                }
-
-                setLoading(false);
-            })
-            .catch((err) => {
-
-                console.error(
-                    "Recommendation API Error:",
-                    err
-                );
-
-                setError(
-                    "Unable to load parking recommendation."
-                );
-
-                setLoading(false);
-            });
-
+        // Cleanup interval when component is removed
+        return () => clearInterval(interval);
     }, []);
 
     if (loading) {
@@ -63,7 +70,6 @@ const Recommendation = () => {
     if (error) {
         return (
             <div className="recommendation-section">
-
                 <h2>
                     🅿️ Smart Parking Recommendation
                 </h2>
@@ -71,7 +77,6 @@ const Recommendation = () => {
                 <p className="recommendation-error">
                     {error}
                 </p>
-
             </div>
         );
     }
@@ -128,7 +133,6 @@ const Recommendation = () => {
                     </p>
 
                 </div>
-
             )}
 
         </div>

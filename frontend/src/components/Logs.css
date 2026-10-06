@@ -1,0 +1,262 @@
+/* ================================
+   PARKING LOGS PAGE
+================================ */
+
+.logs-container {
+    width: 100%;
+    padding: 30px 40px;
+    box-sizing: border-box;
+}
+
+/* ================================
+   HEADER
+================================ */
+
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+.logs-header h1 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.logs-header p {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 16px;
+}
+
+/* ================================
+   REFRESH BUTTON
+================================ */
+
+.refresh-button {
+    border: none;
+    background: #2563eb;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 7px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.refresh-button:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+/* ================================
+   ERROR
+================================ */
+
+.logs-error {
+    background: #fee2e2;
+    color: #b91c1c;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #fecaca;
+}
+
+/* ================================
+   LOADING
+================================ */
+
+.logs-loading {
+    background: white;
+    padding: 40px;
+    text-align: center;
+    border-radius: 10px;
+    color: #64748b;
+}
+
+/* ================================
+   TABLE CARD
+================================ */
+
+.logs-table-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+}
+
+/* ================================
+   TABLE WRAPPER
+================================ */
+
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* ================================
+   TABLE
+================================ */
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px;
+    font-size: 14px;
+}
+
+/* ================================
+   TABLE HEADER
+================================ */
+
+.logs-table thead {
+    background: #f1f5f9;
+}
+
+.logs-table th {
+    padding: 16px 14px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #334155;
+    border-bottom: 2px solid #cbd5e1;
+    border-right: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.logs-table th:last-child {
+    border-right: none;
+}
+
+/* ================================
+   TABLE BODY
+================================ */
+
+.logs-table td {
+    padding: 14px;
+    text-align: center;
+    color: #334155;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.logs-table td:last-child {
+    border-right: none;
+}
+
+/* ================================
+   ROW HOVER
+================================ */
+
+.logs-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.logs-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+/* ================================
+   VEHICLE NUMBER
+================================ */
+
+.logs-table td strong {
+    color: #1e293b;
+    font-weight: 700;
+}
+
+/* ================================
+   ENTRY / EXIT
+================================ */
+
+.type-entry {
+    display: inline-block;
+    background: #dcfce7;
+    color: #15803d;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.type-exit {
+    display: inline-block;
+    background: #fee2e2;
+    color: #dc2626;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ================================
+   STATUS
+================================ */
+
+.status-success {
+    display: inline-block;
+    background: #dcfce7;
+    color: #15803d;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ================================
+   NO RECORDS
+================================ */
+
+.no-records {
+    padding: 40px !important;
+    color: #64748b !important;
+    font-size: 15px;
+}
+
+/* ================================
+   FOOTER
+================================ */
+
+.logs-footer {
+    padding: 15px 20px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.logs-footer strong {
+    color: #1e293b;
+}
+
+/* ================================
+   MOBILE
+================================ */
+
+@media (max-width: 768px) {
+
+    .logs-container {
+        padding: 20px;
+    }
+
+    .logs-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .logs-header h1 {
+        font-size: 26px;
+    }
+
+    .refresh-button {
+        width: 100%;
+    }
+
+}
